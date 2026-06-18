@@ -12,6 +12,8 @@ __pycache__/
 
 # Data (regenerable via datasets/download.py)
 /datasets/imagenet_kaggle/
+/datasets/cifar10/
+/datasets/imagenet_full/
 
 # Model weight cache (large binaries)
 /models/

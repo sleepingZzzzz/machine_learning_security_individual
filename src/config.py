@@ -6,7 +6,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = PROJECT_ROOT / "datasets" / "imagenet_kaggle"
 IMAGE_DIR = DATA_ROOT / "data"
-INDICES_CSV = DATA_ROOT / "indices_1000_seed42.csv"
+# Dev set: 4000 images, balanced (4 per class), used for iteration.
+INDICES_CSV = DATA_ROOT / "indices_4000_seed42.csv"
+# Submission set: balanced 1000 (1 per class), a subset of the dev set.
+SUBMISSION_INDICES_CSV = DATA_ROOT / "indices_1000_seed42.csv"
+CIFAR10_DIR = PROJECT_ROOT / "datasets" / "cifar10"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 RUNS_DIR = PROJECT_ROOT / "runs"
 LOG_MD = PROJECT_ROOT / "log.md"
@@ -16,6 +20,20 @@ LOG_MD = PROJECT_ROOT / "log.md"
 STANDARD_MODEL_NAME = "Standard_R50"
 # Same ResNet-50 backbone family as Standard_R50; good default for comparison.
 ROBUST_MODEL_NAME = "Engstrom2019Robustness"
+
+# ── Transfer (black-box) attack setup ─────────────────────────────────────
+# Surrogate = the model the attacker actually has (a generic standard classifier).
+# Adversarial examples are crafted on it, then transferred to unknown targets.
+SURROGATE_MODEL_NAME = "Standard_R50"
+# Held-out targets simulating unknown defender models; spread across architectures:
+#   Engstrom2019Robustness          - ResNet-50 (same arch as surrogate, robust-trained)
+#   Singh2023Revisiting_ConvNeXt-T  - modern CNN
+#   Singh2023Revisiting_ViT-S       - vision transformer
+TARGET_MODEL_NAMES = [
+    "Engstrom2019Robustness",
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem",
+    "Singh2023Revisiting_ViT-S-ConvStem",
+]
 
 # Other reasonable robust candidates (see --list-models):
 #   Salman2020Do_R50, Salman2020Do_50_2, Wong2020Fast
@@ -48,5 +66,6 @@ EPSILONS = [0, 1 / 255, 2 / 255, 4 / 255, 6 / 255, 8 / 255]
 
 # ── Defaults ───────────────────────────────────────────────────────────────
 DEFAULT_SEED = 42
-DEFAULT_N_SAMPLES = 1000
+DEFAULT_N_SAMPLES = 4000
+DEFAULT_PER_CLASS = 4
 DEFAULT_BATCH_SIZE = 16

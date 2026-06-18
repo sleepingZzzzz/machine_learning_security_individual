@@ -1,6 +1,10 @@
 # MLSec Individual Project
 
-Adversarial robustness evaluation on ImageNet (1000-sample subset) under L∞ threat model.
+Adversarial robustness evaluation on ImageNet under the L∞ threat model. Attacks are
+crafted on a **surrogate** (`Standard_R50`) and **transferred** to held-out target models
+(black-box setting), compared against a random Gaussian baseline via security evaluation
+curves and AUC. A balanced 4000-image dev set is used for iteration; a balanced 1000-image
+subset is used for submission.
 
 ## Setup
 
@@ -14,8 +18,13 @@ pip install -r requirements.txt
 ## Data
 
 ```powershell
-python datasets/download.py --n-samples 1000 --seed 42 --quiet
+# Balanced ImageNet val (4/class = 4000 dev + 1/class = 1000 submission) + CIFAR-10
+python datasets/download.py --per-class 4 --seed 42 --quiet
 ```
+
+This writes `indices_4000_seed42.csv` (dev) and `indices_1000_seed42.csv` (submission),
+keeps only the canonical balanced JPEGs in `datasets/imagenet_kaggle/data/`, and downloads
+the CIFAR-10 test set into `datasets/cifar10/` (use `--skip-cifar10` to skip).
 
 ## Run
 
@@ -26,11 +35,11 @@ python -m src.run --list-models
 # Smoke test (10 images, standard model)
 python -m src.run --smoke --n 10
 
-# Smoke test both standard + robust
-python -m src.run --smoke --with-robust --n 10
-
-# Full evaluation (1000 images; archives data to runs/expN + outputs/)
+# Full transfer evaluation (craft on surrogate, evaluate held-out targets)
 python -m src.run --full
+
+# Add white-box reference curves (craft on each model itself; slower)
+python -m src.run --full --whitebox
 ```
 
 Record-keeping is manual by design: `--full` only archives experiment *data*
@@ -49,9 +58,10 @@ src/
   eval/                  # metrics, AUC, plotting
   run.py                 # entry point
 datasets/
-  download.py            # ImageNet 1000-sample downloader
-  imagenet_kaggle/       # images + indices CSV
+  download.py            # balanced ImageNet subset + CIFAR-10 downloader
+  imagenet_kaggle/       # images + indices CSV (gitignored)
+  cifar10/               # CIFAR-10 test set (gitignored)
 runs/                    # full experiment data snapshots (exp1, exp2, ...)
 log.md                   # experiment log (manual, full runs only)
-outputs/                 # latest full run mirror
+outputs/                 # manually curated submission/SOTA results (tracked)
 ```

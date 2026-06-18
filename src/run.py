@@ -11,6 +11,7 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from src.attacks.gaussian_linf import gaussian_linf_baseline
 from src.attacks.pgd_linf import pgd_linf
@@ -23,6 +24,8 @@ from src.config import (
     PGD_STEPS,
     ROBUST_MODEL_NAME,
     STANDARD_MODEL_NAME,
+    SURROGATE_MODEL_NAME,
+    TARGET_MODEL_NAMES,
 )
 from src.data.imagenet_subset import ImageNetSubset, load_indices
 from src.data.transforms import get_eval_transform
@@ -33,7 +36,7 @@ from src.eval.exp_manager import (
     snapshot_hyperparameters,
 )
 from src.eval.robust_accuracy import accuracy, robust_accuracy
-from src.eval.sec_curve import plot_security_curves
+from src.eval.sec_curve import plot_per_model_panels, plot_security_curves
 from src.models.robustbench_loader import (
     list_available_models,
     list_recommended_robust_models,
@@ -118,6 +121,79 @@ def evaluate_model(
     return results
 
 
+def _pgd_craft(model, x, y, eps):
+    return pgd_linf(
+        model, x, y,
+        eps=eps, steps=PGD_STEPS, step_size=eps / 4, random_start=PGD_RANDOM_START,
+    )
+
+
+def evaluate_suite(
+    surrogate,
+    surrogate_name: str,
+    target_models: dict,
+    loader: DataLoader,
+    device: torch.device,
+    epsilons: list[float],
+    *,
+    whitebox: bool = False,
+) -> dict[str, dict[str, list[float]]]:
+    """
+    Transfer (black-box) evaluation.
+
+    Adversarial examples are crafted ONCE on the surrogate per batch, then transferred
+    to each held-out target model (attack key ``pgd_transfer``). The Gaussian baseline
+    (model-agnostic) is reported per model. With ``whitebox=True`` we also craft PGD on
+    each model itself (``pgd_whitebox``) as an upper-bound reference, and include the
+    surrogate as a reported model.
+    """
+    report_models: dict = dict(target_models)
+    if whitebox:
+        report_models = {surrogate_name: surrogate, **target_models}
+
+    results: dict[str, dict[str, list[float]]] = {}
+    for name in report_models:
+        results[name] = {"pgd_transfer": [], "gaussian": []} if name in target_models else {"gaussian": []}
+        if whitebox:
+            results[name]["pgd_whitebox"] = []
+
+    for eps in epsilons:
+        if eps <= 0:
+            for name, m in report_models.items():
+                acc = accuracy(m, loader, device)
+                for key in results[name]:
+                    results[name][key].append(acc)
+            continue
+
+        tgt_pgd_correct = {n: 0 for n in target_models}
+        gauss_correct = {n: 0 for n in report_models}
+        total = 0
+        for images, labels in tqdm(loader, desc=f"transfer eps={eps:.4f}", leave=False):
+            images = images.to(device)
+            labels = labels.to(device)
+            total += labels.size(0)
+
+            x_adv = _pgd_craft(surrogate, images, labels, eps)
+            x_gauss = gaussian_linf_baseline(images, eps, variance=GAUSSIAN_VARIANCE)
+            with torch.no_grad():
+                for name, m in report_models.items():
+                    gauss_correct[name] += (m(x_gauss).argmax(1) == labels).sum().item()
+                for name, m in target_models.items():
+                    tgt_pgd_correct[name] += (m(x_adv).argmax(1) == labels).sum().item()
+
+        for name in report_models:
+            results[name]["gaussian"].append(gauss_correct[name] / max(total, 1))
+        for name in target_models:
+            results[name]["pgd_transfer"].append(tgt_pgd_correct[name] / max(total, 1))
+
+        if whitebox:
+            for name, m in report_models.items():
+                wb_fn = lambda mm, x, y, e=eps, mdl=m: _pgd_craft(mdl, x, y, e)
+                results[name]["pgd_whitebox"].append(robust_accuracy(m, loader, wb_fn, device))
+
+    return results
+
+
 def save_results_csv(
     out_path: Path,
     epsilons: list[float],
@@ -167,20 +243,31 @@ def cmd_full(args: argparse.Namespace) -> None:
     loader = make_loader(subset, batch_size=args.batch_size, max_n=n_samples)
     epsilons = EPSILONS if args.epsilons is None else args.epsilons
 
-    model_names = [STANDARD_MODEL_NAME, ROBUST_MODEL_NAME]
+    print(f"\nSurrogate (attacker's model): {SURROGATE_MODEL_NAME}")
+    print(f"Targets (held-out): {', '.join(TARGET_MODEL_NAMES)}")
+    print(f"Mode: transfer{' + whitebox reference' if args.whitebox else ''}")
 
-    all_results: dict[str, dict[str, list[float]]] = {}
-    auc_table: dict[str, dict[str, float]] = {}
+    surrogate = load_robustbench_model(SURROGATE_MODEL_NAME, device=device)
+    target_models = {
+        name: load_robustbench_model(name, device=device) for name in TARGET_MODEL_NAMES
+    }
 
     t0 = time.time()
-    for name in model_names:
-        print(f"\n=== Evaluating {name} ===")
-        all_results[name] = evaluate_model(name, loader, device, epsilons)
-        auc_table[name] = {
-            attack: compute_auc(epsilons, accs) for attack, accs in all_results[name].items()
-        }
-        for attack, auc_val in auc_table[name].items():
-            print(f"  AUC ({attack}): {auc_val:.6f}")
+    all_results = evaluate_suite(
+        surrogate,
+        SURROGATE_MODEL_NAME,
+        target_models,
+        loader,
+        device,
+        epsilons,
+        whitebox=args.whitebox,
+    )
+    auc_table: dict[str, dict[str, float]] = {}
+    for name, attacks in all_results.items():
+        auc_table[name] = {atk: compute_auc(epsilons, accs) for atk, accs in attacks.items()}
+        print(f"\n=== {name} ===")
+        for atk, auc_val in auc_table[name].items():
+            print(f"  AUC ({atk}): {auc_val:.6f}")
 
     elapsed = time.time() - t0
     manifest = {
@@ -188,6 +275,9 @@ def cmd_full(args: argparse.Namespace) -> None:
         "results": all_results,
         "auc": auc_table,
         "n_samples": n_samples,
+        "surrogate": SURROGATE_MODEL_NAME,
+        "targets": list(TARGET_MODEL_NAMES),
+        "whitebox": args.whitebox,
         "elapsed_sec": round(elapsed, 2),
     }
 
@@ -197,12 +287,25 @@ def cmd_full(args: argparse.Namespace) -> None:
         n_samples=n_samples,
         epsilons=epsilons,
         batch_size=args.batch_size,
+        whitebox=args.whitebox,
     )
+    surrogate_whitebox = None
+    if args.whitebox:
+        surrogate_whitebox = all_results.get(SURROGATE_MODEL_NAME, {}).get("pgd_whitebox")
+
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "results.csv"
         png_path = Path(td) / "curves.png"
+        panels_path = Path(td) / "curves_panels.png"
         save_results_csv(csv_path, epsilons, all_results)
         plot_security_curves(all_results, epsilons, png_path)
+        plot_per_model_panels(
+            all_results,
+            epsilons,
+            panels_path,
+            surrogate_name=SURROGATE_MODEL_NAME,
+            surrogate_whitebox=surrogate_whitebox,
+        )
         saved = save_experiment(
             exp_id=exp_id,
             hyperparams=hyperparams,
@@ -210,6 +313,7 @@ def cmd_full(args: argparse.Namespace) -> None:
             results_csv=csv_path,
             curves_png=png_path,
             elapsed_sec=elapsed,
+            panels_png=panels_path,
         )
 
     print(f"\nSaved experiment data to {saved}")
@@ -228,10 +332,15 @@ def main() -> None:
         action="store_true",
         help="Smoke test both standard and robust models",
     )
-    parser.add_argument("--n", type=int, default=None, help="Sample count (smoke default 10, full default 1000)")
+    parser.add_argument("--n", type=int, default=None, help="Sample count (smoke default 10, full default 4000)")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--eps", type=float, default=4 / 255, help="Epsilon for smoke test")
     parser.add_argument("--epsilons", type=float, nargs="*", default=None, help="Custom epsilon list for --full")
+    parser.add_argument(
+        "--whitebox",
+        action="store_true",
+        help="Also compute white-box PGD (craft on each model itself) as a reference; slower.",
+    )
     args = parser.parse_args()
 
     if args.list_models:

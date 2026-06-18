@@ -8,6 +8,7 @@ only archives experiment *data* (config snapshot, results, curves, manifest).
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -41,11 +42,13 @@ def snapshot_hyperparameters(
     n_samples: int,
     epsilons: list[float],
     batch_size: int,
+    whitebox: bool = False,
 ) -> dict[str, Any]:
     return {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
-        "standard_model": cfg.STANDARD_MODEL_NAME,
-        "robust_model": cfg.ROBUST_MODEL_NAME,
+        "surrogate_model": cfg.SURROGATE_MODEL_NAME,
+        "target_models": list(cfg.TARGET_MODEL_NAMES),
+        "include_whitebox": whitebox,
         "dataset": cfg.DATASET,
         "threat_model": cfg.THREAT_MODEL,
         "n_samples": n_samples,
@@ -68,6 +71,7 @@ def save_experiment(
     results_csv: Path,
     curves_png: Path,
     elapsed_sec: float,
+    panels_png: Path | None = None,
 ) -> Path:
     out = exp_dir(exp_id)
     out.mkdir(parents=True, exist_ok=True)
@@ -75,18 +79,24 @@ def save_experiment(
     (out / "config.json").write_text(json.dumps(hyperparams, indent=2), encoding="utf-8")
     (out / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
+    paths = {
+        "results_csv": "results.csv",
+        "curves_png": "curves.png",
+        "config": "config.json",
+        "manifest": "run_manifest.json",
+    }
+    if panels_png is not None:
+        paths["panels_png"] = "curves_panels.png"
+
     meta = {
         "exp_id": exp_id,
         "elapsed_sec": round(elapsed_sec, 2),
-        "paths": {
-            "results_csv": "results.csv",
-            "curves_png": "curves.png",
-            "config": "config.json",
-            "manifest": "run_manifest.json",
-        },
+        "paths": paths,
     }
     (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     shutil.copy2(results_csv, out / "results.csv")
     shutil.copy2(curves_png, out / "curves.png")
+    if panels_png is not None:
+        shutil.copy2(panels_png, out / "curves_panels.png")
     return out
