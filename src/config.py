@@ -22,14 +22,20 @@ STANDARD_MODEL_NAME = "Standard_R50"
 ROBUST_MODEL_NAME = "Engstrom2019Robustness"
 
 # ── Transfer (black-box) attack setup ─────────────────────────────────────
-# Surrogate = the model the attacker actually has (a generic standard classifier).
-# Adversarial examples are crafted on it, then transferred to unknown targets.
-SURROGATE_MODEL_NAME = "Standard_R50"
-# Held-out targets simulating unknown defender models; spread across architectures:
-#   Engstrom2019Robustness          - ResNet-50 (same arch as surrogate, robust-trained)
-#   Singh2023Revisiting_ConvNeXt-T  - modern CNN
-#   Singh2023Revisiting_ViT-S       - vision transformer
+# Surrogate = the model the attacker actually has. We use a *robust* ResNet-50
+# (Salman2020Do_R50): adversarial examples crafted on robust features tend to
+# transfer better, and an attack that defeats robust targets should a fortiori
+# defeat the (easier) non-robust target. Surrogate is held-out from all targets.
+SURROGATE_MODEL_NAME = "Salman2020Do_R50"
+# Held-out targets simulating unknown defender models; disjoint from surrogate,
+# spread across robustness and architectures (satisfies the assignment's
+# "include one non-robust + one robust evaluated model" requirement):
+#   Standard_R50                    - non-robust ResNet-50 (RobustBench standard)
+#   Engstrom2019Robustness          - robust ResNet-50
+#   Singh2023Revisiting_ConvNeXt-T  - robust modern CNN
+#   Singh2023Revisiting_ViT-S       - robust vision transformer
 TARGET_MODEL_NAMES = [
+    "Standard_R50",
     "Engstrom2019Robustness",
     "Singh2023Revisiting_ConvNeXt-T-ConvStem",
     "Singh2023Revisiting_ViT-S-ConvStem",
