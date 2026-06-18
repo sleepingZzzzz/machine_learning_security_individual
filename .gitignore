@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Editor
+/.vscode/
+
+# Personal notes / thinking log (kept private)
+/.log/
+
+# Data (regenerable via datasets/download.py)
+/datasets/imagenet_kaggle/
+
+# Model weight cache (large binaries)
+/models/
+
+# Experiment snapshots (regenerable)
+/runs/
+
+# Assignment spec & report draft (personal info)
+/Project-ind.pdf
+/report-ind.docx
+
+# NOTE: /outputs/ is intentionally tracked — used to curate submission SOTA results.

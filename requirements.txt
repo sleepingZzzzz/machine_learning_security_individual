@@ -1,0 +1,27 @@
+# MLSec Individual — Python dependencies (conda env: mlsec)
+# Install: pip install -r requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# Deep learning (match mlsec: torch 2.8.0+cu126)
+torch==2.8.0
+torchvision==0.23.0
+
+# robustbench needs pkg_resources (setuptools<81) and autoattack
+setuptools<81
+git+https://github.com/fra31/auto-attack.git@a39220048b3c9f2cca9a4d3a54604793c68eca7e
+
+robustbench>=1.1.0
+timm>=1.0.9
+
+# Data & numerics
+numpy>=1.24.0,<3
+pandas>=2.0.0
+Pillow>=10.0.0
+
+# Evaluation & plotting
+matplotlib>=3.7.0
+tqdm>=4.65.0
+
+# Dataset download (datasets/download.py)
+kaggle>=1.6.0
