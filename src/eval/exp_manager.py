@@ -43,12 +43,14 @@ def snapshot_hyperparameters(
     epsilons: list[float],
     batch_size: int,
     whitebox: bool = False,
+    transfer_opts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "surrogate_model": cfg.SURROGATE_MODEL_NAME,
         "target_models": list(cfg.TARGET_MODEL_NAMES),
         "include_whitebox": whitebox,
+        "transfer_opts": transfer_opts or {},
         "dataset": cfg.DATASET,
         "threat_model": cfg.THREAT_MODEL,
         "n_samples": n_samples,

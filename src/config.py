@@ -64,6 +64,19 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 PGD_STEPS = 20
 PGD_RANDOM_START = True
 
+# ── Transfer enhancements (applied ONLY when crafting on the surrogate) ──────
+# Boost cross-model transferability. White-box reference (pgd_whitebox) stays
+# plain PGD. Literature-standard defaults; CLI flags override per-run.
+#   TRANSFER_LOSS: "ce" | "margin" (CW logit-margin, decision-boundary oriented)
+#   MI_MOMENTUM  : MI-FGSM momentum decay (0 disables)
+#   DI_PROB      : DI input-diversity probability (0 disables)
+#   TI_KERNEL_SIZE: TI gaussian-kernel size (<=1 disables)
+TRANSFER_LOSS = "margin"
+MI_MOMENTUM = 1.0
+DI_PROB = 0.7
+TI_KERNEL_SIZE = 5
+TI_SIGMA = 3.0
+
 # ── Gaussian baseline ──────────────────────────────────────────────────────
 GAUSSIAN_VARIANCE = 0.001
 

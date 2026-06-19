@@ -15,17 +15,24 @@ from tqdm import tqdm
 
 from src.attacks.gaussian_linf import gaussian_linf_baseline
 from src.attacks.pgd_linf import pgd_linf
+from src.attacks.transfer_pgd import transfer_pgd_linf
 from src.config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_N_SAMPLES,
+    DI_PROB,
     EPSILONS,
     GAUSSIAN_VARIANCE,
+    IMAGE_SIZE,
+    MI_MOMENTUM,
     PGD_RANDOM_START,
     PGD_STEPS,
     ROBUST_MODEL_NAME,
     STANDARD_MODEL_NAME,
     SURROGATE_MODEL_NAME,
     TARGET_MODEL_NAMES,
+    TI_KERNEL_SIZE,
+    TI_SIGMA,
+    TRANSFER_LOSS,
 )
 from src.data.imagenet_subset import ImageNetSubset, load_indices
 from src.data.transforms import get_eval_transform
@@ -128,6 +135,21 @@ def _pgd_craft(model, x, y, eps):
     )
 
 
+def _transfer_craft(model, x, y, eps, opts: dict):
+    """Surrogate-side crafting with transfer enhancements (MI/DI/TI/margin)."""
+    return transfer_pgd_linf(
+        model, x, y,
+        eps=eps, steps=PGD_STEPS, step_size=eps / 4, random_start=PGD_RANDOM_START,
+        momentum=opts["momentum"], di_prob=opts["di_prob"],
+        ti_kernel_size=opts["ti_kernel"], ti_sigma=opts["ti_sigma"],
+        loss=opts["loss"], image_size=IMAGE_SIZE,
+    )
+
+
+def _default_transfer_opts() -> dict:
+    return {"loss": "ce", "momentum": 0.0, "di_prob": 0.0, "ti_kernel": 0, "ti_sigma": 0.0}
+
+
 def evaluate_suite(
     surrogate,
     surrogate_name: str,
@@ -137,6 +159,7 @@ def evaluate_suite(
     epsilons: list[float],
     *,
     whitebox: bool = False,
+    transfer_opts: dict | None = None,
 ) -> dict[str, dict[str, list[float]]]:
     """
     Transfer (black-box) evaluation.
@@ -147,6 +170,9 @@ def evaluate_suite(
     each model itself (``pgd_whitebox``) as an upper-bound reference, and include the
     surrogate as a reported model.
     """
+    if transfer_opts is None:
+        transfer_opts = _default_transfer_opts()
+
     report_models: dict = dict(target_models)
     if whitebox:
         report_models = {surrogate_name: surrogate, **target_models}
@@ -173,7 +199,7 @@ def evaluate_suite(
             labels = labels.to(device)
             total += labels.size(0)
 
-            x_adv = _pgd_craft(surrogate, images, labels, eps)
+            x_adv = _transfer_craft(surrogate, images, labels, eps, transfer_opts)
             x_gauss = gaussian_linf_baseline(images, eps, variance=GAUSSIAN_VARIANCE)
             with torch.no_grad():
                 for name, m in report_models.items():
@@ -243,9 +269,22 @@ def cmd_full(args: argparse.Namespace) -> None:
     loader = make_loader(subset, batch_size=args.batch_size, max_n=n_samples)
     epsilons = EPSILONS if args.epsilons is None else args.epsilons
 
+    transfer_opts = {
+        "loss": args.transfer_loss if args.transfer_loss is not None else TRANSFER_LOSS,
+        "momentum": args.mi_momentum if args.mi_momentum is not None else MI_MOMENTUM,
+        "di_prob": args.di_prob if args.di_prob is not None else DI_PROB,
+        "ti_kernel": args.ti_kernel if args.ti_kernel is not None else TI_KERNEL_SIZE,
+        "ti_sigma": TI_SIGMA,
+    }
+
     print(f"\nSurrogate (attacker's model): {SURROGATE_MODEL_NAME}")
     print(f"Targets (held-out): {', '.join(TARGET_MODEL_NAMES)}")
     print(f"Mode: transfer{' + whitebox reference' if args.whitebox else ''}")
+    print(
+        f"Transfer enhancements: loss={transfer_opts['loss']}, "
+        f"MI={transfer_opts['momentum']}, DI={transfer_opts['di_prob']}, "
+        f"TI={transfer_opts['ti_kernel']} (sigma={transfer_opts['ti_sigma']})"
+    )
 
     surrogate = load_robustbench_model(SURROGATE_MODEL_NAME, device=device)
     target_models = {
@@ -261,6 +300,7 @@ def cmd_full(args: argparse.Namespace) -> None:
         device,
         epsilons,
         whitebox=args.whitebox,
+        transfer_opts=transfer_opts,
     )
     auc_table: dict[str, dict[str, float]] = {}
     for name, attacks in all_results.items():
@@ -278,6 +318,7 @@ def cmd_full(args: argparse.Namespace) -> None:
         "surrogate": SURROGATE_MODEL_NAME,
         "targets": list(TARGET_MODEL_NAMES),
         "whitebox": args.whitebox,
+        "transfer_opts": transfer_opts,
         "elapsed_sec": round(elapsed, 2),
     }
 
@@ -288,6 +329,7 @@ def cmd_full(args: argparse.Namespace) -> None:
         epsilons=epsilons,
         batch_size=args.batch_size,
         whitebox=args.whitebox,
+        transfer_opts=transfer_opts,
     )
     surrogate_whitebox = None
     if args.whitebox:
@@ -341,6 +383,13 @@ def main() -> None:
         action="store_true",
         help="Also compute white-box PGD (craft on each model itself) as a reference; slower.",
     )
+    parser.add_argument(
+        "--transfer-loss", choices=["ce", "margin"], default=None,
+        help="Surrogate-craft loss (default: config TRANSFER_LOSS)",
+    )
+    parser.add_argument("--mi-momentum", type=float, default=None, help="MI-FGSM momentum (0 disables)")
+    parser.add_argument("--di-prob", type=float, default=None, help="DI input-diversity prob (0 disables)")
+    parser.add_argument("--ti-kernel", type=int, default=None, help="TI gaussian kernel size (<=1 disables)")
     args = parser.parse_args()
 
     if args.list_models:
