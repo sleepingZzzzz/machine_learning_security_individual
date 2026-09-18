@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-06-19T13:34:30",
+  "surrogate_model": "Ensemble[Carmon2019Unlabeled+Andriushchenko2020Understanding]",
+  "surrogate_members": [
+    "Carmon2019Unlabeled",
+    "Andriushchenko2020Understanding"
+  ],
+  "target_models": [
+    "Standard",
+    "Engstrom2019Robustness",
+    "Wong2020Fast",
+    "Rice2020Overfitting"
+  ],
+  "include_whitebox": false,
+  "transfer_opts": {
+    "loss": "ce",
+    "momentum": 1.0,
+    "di_prob": 0.0,
+    "ti_kernel": 0,
+    "ti_sigma": 3.0
+  },
+  "dataset": "cifar10",
+  "threat_model": "Linf",
+  "n_samples": 1000,
+  "epsilons": [
+    0,
+    0.00392156862745098,
+    0.00784313725490196,
+    0.01568627450980392,
+    0.023529411764705882,
+    0.03137254901960784
+  ],
+  "batch_size": 256,
+  "pgd_steps": 20,
+  "pgd_random_start": true,
+  "gaussian_variance": 0.001,
+  "resize_size": 256,
+  "image_size": 32,
+  "indices_csv": "cifar10:balanced_test"
+}

@@ -20,19 +20,23 @@ def _threat_enum() -> ThreatModel:
 def load_robustbench_model(
     model_name: str,
     device: torch.device | str = "cpu",
+    *,
+    dataset: str | None = None,
+    threat_model: str | None = None,
 ) -> nn.Module:
     """
     Load a RobustBench model.
 
-    ImageNet models from the zoo already include input normalization
-  (normalize_model with ImageNet mean/std). Feed [0, 1] RGB tensors.
+    Models from the zoo already include any required input normalization, so feed
+    [0, 1] RGB tensors (ImageNet: 224x224, CIFAR-10: 32x32). ``dataset`` /
+    ``threat_model`` default to the config values; override for cross-dataset runs.
     """
     from robustbench.utils import load_model
 
     model = load_model(
         model_name=model_name,
-        dataset=DATASET,
-        threat_model=THREAT_MODEL,
+        dataset=dataset or DATASET,
+        threat_model=threat_model or THREAT_MODEL,
     )
     model = model.to(device)
     model.eval()

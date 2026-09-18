@@ -1,0 +1,125 @@
+{
+  "dataset": "imagenet",
+  "data_source": "D:\\project\\3_2MLS\\individual\\datasets\\imagenet_kaggle\\indices_1000_seed42.csv",
+  "epsilons": [
+    0,
+    0.00392156862745098,
+    0.00784313725490196,
+    0.01568627450980392,
+    0.023529411764705882,
+    0.03137254901960784
+  ],
+  "results": {
+    "Standard_R50": {
+      "pgd_transfer": [
+        0.766,
+        0.736,
+        0.695,
+        0.605,
+        0.457,
+        0.32
+      ],
+      "gaussian": [
+        0.766,
+        0.769,
+        0.767,
+        0.764,
+        0.753,
+        0.746
+      ]
+    },
+    "Engstrom2019Robustness": {
+      "pgd_transfer": [
+        0.631,
+        0.608,
+        0.571,
+        0.52,
+        0.437,
+        0.382
+      ],
+      "gaussian": [
+        0.631,
+        0.631,
+        0.632,
+        0.632,
+        0.627,
+        0.626
+      ]
+    },
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem": {
+      "pgd_transfer": [
+        0.734,
+        0.721,
+        0.696,
+        0.647,
+        0.576,
+        0.524
+      ],
+      "gaussian": [
+        0.734,
+        0.734,
+        0.734,
+        0.734,
+        0.736,
+        0.735
+      ]
+    },
+    "Singh2023Revisiting_ViT-S-ConvStem": {
+      "pgd_transfer": [
+        0.713,
+        0.694,
+        0.663,
+        0.609,
+        0.565,
+        0.502
+      ],
+      "gaussian": [
+        0.713,
+        0.714,
+        0.714,
+        0.715,
+        0.716,
+        0.718
+      ]
+    }
+  },
+  "auc": {
+    "Standard_R50": {
+      "pgd_transfer": 0.018060784313725493,
+      "gaussian": 0.023852941176470587
+    },
+    "Engstrom2019Robustness": {
+      "pgd_transfer": 0.015984313725490196,
+      "gaussian": 0.019758823529411766
+    },
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem": {
+      "pgd_transfer": 0.020007843137254903,
+      "gaussian": 0.023047058823529414
+    },
+    "Singh2023Revisiting_ViT-S-ConvStem": {
+      "pgd_transfer": 0.019196078431372547,
+      "gaussian": 0.022437254901960784
+    }
+  },
+  "n_samples": 1000,
+  "surrogate": "Ensemble[Salman2020Do_R50+Debenedetti2022Light_XCiT-S12]",
+  "surrogate_members": [
+    "Salman2020Do_R50",
+    "Debenedetti2022Light_XCiT-S12"
+  ],
+  "targets": [
+    "Standard_R50",
+    "Engstrom2019Robustness",
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem",
+    "Singh2023Revisiting_ViT-S-ConvStem"
+  ],
+  "whitebox": false,
+  "transfer_opts": {
+    "loss": "ce",
+    "momentum": 1.0,
+    "di_prob": 0.0,
+    "ti_kernel": 0,
+    "ti_sigma": 3.0
+  },
+  "elapsed_sec": 591.32
+}

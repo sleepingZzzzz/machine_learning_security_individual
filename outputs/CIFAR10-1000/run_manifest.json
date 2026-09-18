@@ -1,0 +1,125 @@
+{
+  "dataset": "cifar10",
+  "data_source": "cifar10:balanced_test",
+  "epsilons": [
+    0,
+    0.00392156862745098,
+    0.00784313725490196,
+    0.01568627450980392,
+    0.023529411764705882,
+    0.03137254901960784
+  ],
+  "results": {
+    "Standard": {
+      "pgd_transfer": [
+        0.949,
+        0.937,
+        0.909,
+        0.866,
+        0.787,
+        0.673
+      ],
+      "gaussian": [
+        0.949,
+        0.949,
+        0.943,
+        0.936,
+        0.932,
+        0.916
+      ]
+    },
+    "Engstrom2019Robustness": {
+      "pgd_transfer": [
+        0.88,
+        0.867,
+        0.844,
+        0.797,
+        0.742,
+        0.672
+      ],
+      "gaussian": [
+        0.88,
+        0.88,
+        0.879,
+        0.879,
+        0.878,
+        0.88
+      ]
+    },
+    "Wong2020Fast": {
+      "pgd_transfer": [
+        0.847,
+        0.826,
+        0.81,
+        0.75,
+        0.682,
+        0.6
+      ],
+      "gaussian": [
+        0.847,
+        0.848,
+        0.848,
+        0.849,
+        0.848,
+        0.848
+      ]
+    },
+    "Rice2020Overfitting": {
+      "pgd_transfer": [
+        0.864,
+        0.849,
+        0.83,
+        0.785,
+        0.736,
+        0.674
+      ],
+      "gaussian": [
+        0.864,
+        0.864,
+        0.865,
+        0.864,
+        0.865,
+        0.867
+      ]
+    }
+  },
+  "auc": {
+    "Standard": {
+      "pgd_transfer": 0.02648627450980392,
+      "gaussian": 0.029372549019607844
+    },
+    "Engstrom2019Robustness": {
+      "pgd_transfer": 0.02479607843137255,
+      "gaussian": 0.02757843137254902
+    },
+    "Wong2020Fast": {
+      "pgd_transfer": 0.023249019607843136,
+      "gaussian": 0.02660980392156863
+    },
+    "Rice2020Overfitting": {
+      "pgd_transfer": 0.02447843137254902,
+      "gaussian": 0.02713137254901961
+    }
+  },
+  "n_samples": 1000,
+  "surrogate": "Ensemble[Carmon2019Unlabeled+Andriushchenko2020Understanding]",
+  "surrogate_members": [
+    "Carmon2019Unlabeled",
+    "Andriushchenko2020Understanding"
+  ],
+  "targets": [
+    "Standard",
+    "Engstrom2019Robustness",
+    "Wong2020Fast",
+    "Rice2020Overfitting"
+  ],
+  "whitebox": false,
+  "transfer_opts": {
+    "loss": "ce",
+    "momentum": 1.0,
+    "di_prob": 0.0,
+    "ti_kernel": 0,
+    "ti_sigma": 3.0
+  },
+  "elapsed_sec": 194.71
+}

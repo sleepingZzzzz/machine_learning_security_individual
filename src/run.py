@@ -23,17 +23,19 @@ from src.config import (
     EPSILONS,
     GAUSSIAN_VARIANCE,
     IMAGE_SIZE,
+    INDICES_CSV,
     MI_MOMENTUM,
     PGD_RANDOM_START,
     PGD_STEPS,
     ROBUST_MODEL_NAME,
     STANDARD_MODEL_NAME,
-    SURROGATE_MODEL_NAME,
-    TARGET_MODEL_NAMES,
+    SUBMISSION_INDICES_CSV,
     TI_KERNEL_SIZE,
     TI_SIGMA,
     TRANSFER_LOSS,
+    get_dataset_profile,
 )
+from src.data.cifar_subset import CIFAR10Balanced
 from src.data.imagenet_subset import ImageNetSubset, load_indices
 from src.data.transforms import get_eval_transform
 from src.eval.auc import compute_auc
@@ -44,6 +46,7 @@ from src.eval.exp_manager import (
 )
 from src.eval.robust_accuracy import accuracy, robust_accuracy
 from src.eval.sec_curve import plot_per_model_panels, plot_security_curves
+from src.models.ensemble import EnsembleModel
 from src.models.robustbench_loader import (
     list_available_models,
     list_recommended_robust_models,
@@ -81,6 +84,40 @@ class TensorDataset(torch.utils.data.Dataset):
 def make_loader(subset: ImageNetSubset, batch_size: int, max_n: int | None = None) -> DataLoader:
     xs, ys = _tensor_dataset(subset, max_n=max_n)
     return DataLoader(TensorDataset(xs, ys), batch_size=batch_size, shuffle=False)
+
+
+def build_eval_loader(
+    data_kind: str,
+    *,
+    batch_size: int,
+    n_samples: int | None,
+    submission: bool,
+) -> tuple[DataLoader, int, str]:
+    """Build the evaluation loader for a dataset profile.
+
+    Returns ``(loader, n_evaluated, source_desc)``. For ImageNet, ``--submission``
+    selects the balanced 1000 set; otherwise the (optionally truncated) 4000 dev set.
+    For CIFAR-10 we use the deterministic balanced test subset.
+    """
+    if data_kind == "imagenet":
+        csv_path = SUBMISSION_INDICES_CSV if submission else INDICES_CSV
+        subset = ImageNetSubset(indices=load_indices(csv_path))
+        on_disk = {p.stem for p in subset.image_dir.glob("*.JPEG")}
+        missing = {r.image_id for r in subset.indices} - on_disk
+        if missing:
+            print(f"WARNING: {len(missing)} of {len(subset.indices)} images missing from data/. "
+                  "Run datasets/download.py first.")
+        max_n = None if submission else n_samples
+        loader = make_loader(subset, batch_size=batch_size, max_n=max_n)
+        n_eval = len(subset.indices) if max_n is None else min(max_n, len(subset.indices))
+        return loader, n_eval, str(csv_path)
+
+    if data_kind == "cifar10":
+        subset = CIFAR10Balanced()
+        loader = DataLoader(subset, batch_size=batch_size, shuffle=False)
+        return loader, len(subset), "cifar10:balanced_test"
+
+    raise ValueError(f"Unknown data_kind: {data_kind!r}")
 
 
 def cmd_list_models() -> None:
@@ -135,14 +172,14 @@ def _pgd_craft(model, x, y, eps):
     )
 
 
-def _transfer_craft(model, x, y, eps, opts: dict):
+def _transfer_craft(model, x, y, eps, opts: dict, image_size: int = IMAGE_SIZE):
     """Surrogate-side crafting with transfer enhancements (MI/DI/TI/margin)."""
     return transfer_pgd_linf(
         model, x, y,
         eps=eps, steps=PGD_STEPS, step_size=eps / 4, random_start=PGD_RANDOM_START,
         momentum=opts["momentum"], di_prob=opts["di_prob"],
         ti_kernel_size=opts["ti_kernel"], ti_sigma=opts["ti_sigma"],
-        loss=opts["loss"], image_size=IMAGE_SIZE,
+        loss=opts["loss"], image_size=image_size,
     )
 
 
@@ -160,6 +197,7 @@ def evaluate_suite(
     *,
     whitebox: bool = False,
     transfer_opts: dict | None = None,
+    image_size: int = IMAGE_SIZE,
 ) -> dict[str, dict[str, list[float]]]:
     """
     Transfer (black-box) evaluation.
@@ -199,7 +237,7 @@ def evaluate_suite(
             labels = labels.to(device)
             total += labels.size(0)
 
-            x_adv = _transfer_craft(surrogate, images, labels, eps, transfer_opts)
+            x_adv = _transfer_craft(surrogate, images, labels, eps, transfer_opts, image_size)
             x_gauss = gaussian_linf_baseline(images, eps, variance=GAUSSIAN_VARIANCE)
             with torch.no_grad():
                 for name, m in report_models.items():
@@ -258,15 +296,14 @@ def cmd_full(args: argparse.Namespace) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    n_samples = args.n if args.n is not None else DEFAULT_N_SAMPLES
-    subset = ImageNetSubset()
-    available = {row.image_id for row in load_indices()}
-    on_disk = {p.stem for p in subset.image_dir.glob("*.JPEG")}
-    missing = available - on_disk
-    if missing:
-        print(f"WARNING: {len(missing)} images missing from data/. Run datasets/download.py first.")
-
-    loader = make_loader(subset, batch_size=args.batch_size, max_n=n_samples)
+    profile = get_dataset_profile(args.dataset)
+    n_request = args.n if args.n is not None else DEFAULT_N_SAMPLES
+    loader, n_samples, data_source = build_eval_loader(
+        profile.data_kind,
+        batch_size=args.batch_size,
+        n_samples=n_request,
+        submission=args.submission,
+    )
     epsilons = EPSILONS if args.epsilons is None else args.epsilons
 
     transfer_opts = {
@@ -277,8 +314,23 @@ def cmd_full(args: argparse.Namespace) -> None:
         "ti_sigma": TI_SIGMA,
     }
 
-    print(f"\nSurrogate (attacker's model): {SURROGATE_MODEL_NAME}")
-    print(f"Targets (held-out): {', '.join(TARGET_MODEL_NAMES)}")
+    def _load(name):
+        return load_robustbench_model(name, device=device, dataset=profile.rb_dataset)
+
+    use_ensemble = args.surrogate_ensemble or (profile.surrogate_mode == "ensemble")
+    if use_ensemble:
+        members = [_load(n) for n in profile.surrogate_ensemble]
+        surrogate = EnsembleModel(members, profile.surrogate_ensemble_weights).to(device).eval()
+        surrogate_name = "Ensemble[" + "+".join(profile.surrogate_ensemble) + "]"
+        surrogate_members = list(profile.surrogate_ensemble)
+    else:
+        surrogate = _load(profile.surrogate_single)
+        surrogate_name = profile.surrogate_single
+        surrogate_members = [profile.surrogate_single]
+
+    print(f"\nDataset: {profile.name} ({data_source}), n={n_samples}, image_size={profile.image_size}")
+    print(f"Surrogate (attacker's model): {surrogate_name}")
+    print(f"Targets (held-out): {', '.join(profile.targets)}")
     print(f"Mode: transfer{' + whitebox reference' if args.whitebox else ''}")
     print(
         f"Transfer enhancements: loss={transfer_opts['loss']}, "
@@ -286,21 +338,19 @@ def cmd_full(args: argparse.Namespace) -> None:
         f"TI={transfer_opts['ti_kernel']} (sigma={transfer_opts['ti_sigma']})"
     )
 
-    surrogate = load_robustbench_model(SURROGATE_MODEL_NAME, device=device)
-    target_models = {
-        name: load_robustbench_model(name, device=device) for name in TARGET_MODEL_NAMES
-    }
+    target_models = {name: _load(name) for name in profile.targets}
 
     t0 = time.time()
     all_results = evaluate_suite(
         surrogate,
-        SURROGATE_MODEL_NAME,
+        surrogate_name,
         target_models,
         loader,
         device,
         epsilons,
         whitebox=args.whitebox,
         transfer_opts=transfer_opts,
+        image_size=profile.image_size,
     )
     auc_table: dict[str, dict[str, float]] = {}
     for name, attacks in all_results.items():
@@ -311,12 +361,15 @@ def cmd_full(args: argparse.Namespace) -> None:
 
     elapsed = time.time() - t0
     manifest = {
+        "dataset": profile.name,
+        "data_source": data_source,
         "epsilons": epsilons,
         "results": all_results,
         "auc": auc_table,
         "n_samples": n_samples,
-        "surrogate": SURROGATE_MODEL_NAME,
-        "targets": list(TARGET_MODEL_NAMES),
+        "surrogate": surrogate_name,
+        "surrogate_members": surrogate_members,
+        "targets": list(profile.targets),
         "whitebox": args.whitebox,
         "transfer_opts": transfer_opts,
         "elapsed_sec": round(elapsed, 2),
@@ -330,10 +383,16 @@ def cmd_full(args: argparse.Namespace) -> None:
         batch_size=args.batch_size,
         whitebox=args.whitebox,
         transfer_opts=transfer_opts,
+        surrogate_name=surrogate_name,
+        surrogate_members=surrogate_members,
+        dataset=profile.name,
+        targets=list(profile.targets),
+        image_size=profile.image_size,
+        indices_csv=data_source,
     )
     surrogate_whitebox = None
     if args.whitebox:
-        surrogate_whitebox = all_results.get(SURROGATE_MODEL_NAME, {}).get("pgd_whitebox")
+        surrogate_whitebox = all_results.get(surrogate_name, {}).get("pgd_whitebox")
 
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "results.csv"
@@ -345,7 +404,7 @@ def cmd_full(args: argparse.Namespace) -> None:
             all_results,
             epsilons,
             panels_path,
-            surrogate_name=SURROGATE_MODEL_NAME,
+            surrogate_name=surrogate_name,
             surrogate_whitebox=surrogate_whitebox,
         )
         saved = save_experiment(
@@ -375,6 +434,14 @@ def main() -> None:
         help="Smoke test both standard and robust models",
     )
     parser.add_argument("--n", type=int, default=None, help="Sample count (smoke default 10, full default 4000)")
+    parser.add_argument(
+        "--dataset", choices=["imagenet", "cifar10"], default="imagenet",
+        help="Dataset/model profile for --full (default: imagenet)",
+    )
+    parser.add_argument(
+        "--submission", action="store_true",
+        help="ImageNet only: evaluate the balanced 1000 submission set instead of the 4000 dev set",
+    )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--eps", type=float, default=4 / 255, help="Epsilon for smoke test")
     parser.add_argument("--epsilons", type=float, nargs="*", default=None, help="Custom epsilon list for --full")
@@ -390,6 +457,10 @@ def main() -> None:
     parser.add_argument("--mi-momentum", type=float, default=None, help="MI-FGSM momentum (0 disables)")
     parser.add_argument("--di-prob", type=float, default=None, help="DI input-diversity prob (0 disables)")
     parser.add_argument("--ti-kernel", type=int, default=None, help="TI gaussian kernel size (<=1 disables)")
+    parser.add_argument(
+        "--surrogate-ensemble", action="store_true",
+        help="Use probability-averaged ensemble surrogate (config SURROGATE_ENSEMBLE)",
+    )
     args = parser.parse_args()
 
     if args.list_models:

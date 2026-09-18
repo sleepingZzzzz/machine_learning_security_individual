@@ -1,0 +1,11 @@
+{
+  "exp_id": 10,
+  "elapsed_sec": 591.32,
+  "paths": {
+    "results_csv": "results.csv",
+    "curves_png": "curves.png",
+    "config": "config.json",
+    "manifest": "run_manifest.json",
+    "panels_png": "curves_panels.png"
+  }
+}

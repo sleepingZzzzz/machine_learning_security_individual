@@ -26,3 +26,6 @@ __pycache__/
 /report-ind.docx
 
 # NOTE: /outputs/ is intentionally tracked — used to curate submission SOTA results.
+# Submission artifacts (contain personal info; not source)
+/*.zip
+/*.pdf

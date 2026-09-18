@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-06-19T13:12:49",
+  "surrogate_model": "Ensemble[Salman2020Do_R50+Debenedetti2022Light_XCiT-S12]",
+  "surrogate_members": [
+    "Salman2020Do_R50",
+    "Debenedetti2022Light_XCiT-S12"
+  ],
+  "target_models": [
+    "Standard_R50",
+    "Engstrom2019Robustness",
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem",
+    "Singh2023Revisiting_ViT-S-ConvStem"
+  ],
+  "include_whitebox": false,
+  "transfer_opts": {
+    "loss": "ce",
+    "momentum": 1.0,
+    "di_prob": 0.0,
+    "ti_kernel": 0,
+    "ti_sigma": 3.0
+  },
+  "dataset": "imagenet",
+  "threat_model": "Linf",
+  "n_samples": 1000,
+  "epsilons": [
+    0,
+    0.00392156862745098,
+    0.00784313725490196,
+    0.01568627450980392,
+    0.023529411764705882,
+    0.03137254901960784
+  ],
+  "batch_size": 32,
+  "pgd_steps": 20,
+  "pgd_random_start": true,
+  "gaussian_variance": 0.001,
+  "resize_size": 256,
+  "image_size": 224,
+  "indices_csv": "D:\\project\\3_2MLS\\individual\\datasets\\imagenet_kaggle\\indices_1000_seed42.csv"
+}

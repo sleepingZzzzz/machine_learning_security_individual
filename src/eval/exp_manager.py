@@ -44,14 +44,21 @@ def snapshot_hyperparameters(
     batch_size: int,
     whitebox: bool = False,
     transfer_opts: dict[str, Any] | None = None,
+    surrogate_name: str | None = None,
+    surrogate_members: list[str] | None = None,
+    dataset: str | None = None,
+    targets: list[str] | None = None,
+    image_size: int | None = None,
+    indices_csv: str | None = None,
 ) -> dict[str, Any]:
     return {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
-        "surrogate_model": cfg.SURROGATE_MODEL_NAME,
-        "target_models": list(cfg.TARGET_MODEL_NAMES),
+        "surrogate_model": surrogate_name or cfg.SURROGATE_MODEL_NAME,
+        "surrogate_members": surrogate_members or [cfg.SURROGATE_MODEL_NAME],
+        "target_models": targets if targets is not None else list(cfg.TARGET_MODEL_NAMES),
         "include_whitebox": whitebox,
         "transfer_opts": transfer_opts or {},
-        "dataset": cfg.DATASET,
+        "dataset": dataset or cfg.DATASET,
         "threat_model": cfg.THREAT_MODEL,
         "n_samples": n_samples,
         "epsilons": epsilons,
@@ -60,8 +67,8 @@ def snapshot_hyperparameters(
         "pgd_random_start": cfg.PGD_RANDOM_START,
         "gaussian_variance": cfg.GAUSSIAN_VARIANCE,
         "resize_size": cfg.RESIZE_SIZE,
-        "image_size": cfg.IMAGE_SIZE,
-        "indices_csv": str(cfg.INDICES_CSV),
+        "image_size": image_size if image_size is not None else cfg.IMAGE_SIZE,
+        "indices_csv": indices_csv if indices_csv is not None else str(cfg.INDICES_CSV),
     }
 
 

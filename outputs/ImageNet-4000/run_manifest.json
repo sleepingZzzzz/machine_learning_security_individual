@@ -1,0 +1,123 @@
+{
+  "epsilons": [
+    0,
+    0.00392156862745098,
+    0.00784313725490196,
+    0.01568627450980392,
+    0.023529411764705882,
+    0.03137254901960784
+  ],
+  "results": {
+    "Standard_R50": {
+      "pgd_transfer": [
+        0.768,
+        0.7345,
+        0.6935,
+        0.599,
+        0.46275,
+        0.319
+      ],
+      "gaussian": [
+        0.768,
+        0.763,
+        0.76325,
+        0.75575,
+        0.746,
+        0.74475
+      ]
+    },
+    "Engstrom2019Robustness": {
+      "pgd_transfer": [
+        0.61925,
+        0.59575,
+        0.5655,
+        0.5085,
+        0.43775,
+        0.372
+      ],
+      "gaussian": [
+        0.61925,
+        0.6195,
+        0.61925,
+        0.61875,
+        0.6155,
+        0.61475
+      ]
+    },
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem": {
+      "pgd_transfer": [
+        0.72875,
+        0.70975,
+        0.688,
+        0.63575,
+        0.57275,
+        0.51125
+      ],
+      "gaussian": [
+        0.72875,
+        0.72875,
+        0.72925,
+        0.72925,
+        0.72975,
+        0.73175
+      ]
+    },
+    "Singh2023Revisiting_ViT-S-ConvStem": {
+      "pgd_transfer": [
+        0.71475,
+        0.69275,
+        0.6665,
+        0.612,
+        0.553,
+        0.4845
+      ],
+      "gaussian": [
+        0.71475,
+        0.71475,
+        0.715,
+        0.71475,
+        0.71425,
+        0.71625
+      ]
+    }
+  },
+  "auc": {
+    "Standard_R50": {
+      "pgd_transfer": 0.01804411764705882,
+      "gaussian": 0.023686764705882355
+    },
+    "Engstrom2019Robustness": {
+      "pgd_transfer": 0.01575735294117647,
+      "gaussian": 0.019377450980392157
+    },
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem": {
+      "pgd_transfer": 0.019742647058823528,
+      "gaussian": 0.022889215686274507
+    },
+    "Singh2023Revisiting_ViT-S-ConvStem": {
+      "pgd_transfer": 0.019075980392156862,
+      "gaussian": 0.022426960784313724
+    }
+  },
+  "n_samples": 4000,
+  "surrogate": "Ensemble[Salman2020Do_R50+Debenedetti2022Light_XCiT-S12]",
+  "surrogate_members": [
+    "Salman2020Do_R50",
+    "Debenedetti2022Light_XCiT-S12"
+  ],
+  "targets": [
+    "Standard_R50",
+    "Engstrom2019Robustness",
+    "Singh2023Revisiting_ConvNeXt-T-ConvStem",
+    "Singh2023Revisiting_ViT-S-ConvStem"
+  ],
+  "whitebox": false,
+  "transfer_opts": {
+    "loss": "ce",
+    "momentum": 1.0,
+    "di_prob": 0.0,
+    "ti_kernel": 0,
+    "ti_sigma": 3.0
+  },
+  "elapsed_sec": 3341.7
+}

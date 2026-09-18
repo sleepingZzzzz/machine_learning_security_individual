@@ -1,5 +1,6 @@
 """Central configuration for paths, models, and hyperparameters."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 # ── Project paths ──────────────────────────────────────────────────────────
@@ -27,6 +28,17 @@ ROBUST_MODEL_NAME = "Engstrom2019Robustness"
 # transfer better, and an attack that defeats robust targets should a fortiori
 # defeat the (easier) non-robust target. Surrogate is held-out from all targets.
 SURROGATE_MODEL_NAME = "Salman2020Do_R50"
+# Surrogate mode: "single" uses SURROGATE_MODEL_NAME; "ensemble" uses
+# SURROGATE_ENSEMBLE (probability-averaged). Multi-architecture *robust* ensemble
+# keeps gradient quality high (non-robust members proven unhelpful, see log.md).
+# Default = "ensemble": this is the submitted SOTA (baseline3 / exp9), so a bare
+# `python -m src.run --full` reproduces outputs/.
+SURROGATE_MODE = "ensemble"
+SURROGATE_ENSEMBLE = [
+    "Salman2020Do_R50",              # robust CNN (ResNet-50)
+    "Debenedetti2022Light_XCiT-S12",  # robust transformer (XCiT), orthogonal arch
+]
+SURROGATE_ENSEMBLE_WEIGHTS = None  # None = equal weights
 # Held-out targets simulating unknown defender models; disjoint from surrogate,
 # spread across robustness and architectures (satisfies the assignment's
 # "include one non-robust + one robust evaluated model" requirement):
@@ -71,10 +83,15 @@ PGD_RANDOM_START = True
 #   MI_MOMENTUM  : MI-FGSM momentum decay (0 disables)
 #   DI_PROB      : DI input-diversity probability (0 disables)
 #   TI_KERNEL_SIZE: TI gaussian-kernel size (<=1 disables)
-TRANSFER_LOSS = "margin"
+# DI/TI default to OFF: ablations (exp4/exp7/exp8) showed both *hurt* transfer
+# from a robust surrogate (esp. TI low-pass damaging high-frequency attacks on
+# non-robust targets). Re-enable via CLI only for deliberate experiments.
+# Default loss = "ce": matches the submitted SOTA (baseline3 / exp9); margin was
+# ablated as neutral (exp5/exp6). Override per-run with --transfer-loss.
+TRANSFER_LOSS = "ce"
 MI_MOMENTUM = 1.0
-DI_PROB = 0.7
-TI_KERNEL_SIZE = 5
+DI_PROB = 0.0
+TI_KERNEL_SIZE = 0
 TI_SIGMA = 3.0
 
 # ── Gaussian baseline ──────────────────────────────────────────────────────
@@ -88,3 +105,67 @@ DEFAULT_SEED = 42
 DEFAULT_N_SAMPLES = 4000
 DEFAULT_PER_CLASS = 4
 DEFAULT_BATCH_SIZE = 16
+
+# ── CIFAR-10 (supplementary: cross-dataset generalization check) ────────────
+# Same transfer recipe as ImageNet (held-out targets, robust ensemble surrogate),
+# on a *different* dataset to test whether the attack generalizes. RobustBench
+# CIFAR-10/Linf models take [0,1] 32x32 input (normalization is internal). All
+# surrogate members are disjoint from the targets.
+CIFAR10_IMAGE_SIZE = 32
+CIFAR10_PER_CLASS = 100  # balanced 100/class = 1000 (mirrors the ImageNet 1000 set)
+CIFAR10_SURROGATE_MODEL_NAME = "Carmon2019Unlabeled"        # robust WRN-28-10
+CIFAR10_SURROGATE_MODE = "ensemble"
+CIFAR10_SURROGATE_ENSEMBLE = [
+    "Carmon2019Unlabeled",              # robust WRN-28-10
+    "Andriushchenko2020Understanding",  # robust PreActResNet-18 (different arch)
+]
+CIFAR10_SURROGATE_ENSEMBLE_WEIGHTS = None  # None = equal weights
+CIFAR10_TARGET_MODEL_NAMES = [
+    "Standard",                 # non-robust (RobustBench CIFAR-10 standard)
+    "Engstrom2019Robustness",   # robust ResNet-50
+    "Wong2020Fast",             # robust PreActResNet-18
+    "Rice2020Overfitting",      # robust WRN-34-20
+]
+
+
+@dataclass(frozen=True)
+class DatasetProfile:
+    """Everything the pipeline needs to run on one dataset."""
+
+    name: str                 # "imagenet" | "cifar10"
+    rb_dataset: str           # RobustBench dataset enum value
+    data_kind: str            # how to build the data loader ("imagenet"|"cifar10")
+    image_size: int
+    surrogate_mode: str       # "single" | "ensemble"
+    surrogate_single: str
+    surrogate_ensemble: list[str]
+    surrogate_ensemble_weights: list[float] | None
+    targets: list[str]
+
+
+def get_dataset_profile(name: str) -> DatasetProfile:
+    if name == "imagenet":
+        return DatasetProfile(
+            name="imagenet",
+            rb_dataset="imagenet",
+            data_kind="imagenet",
+            image_size=IMAGE_SIZE,
+            surrogate_mode=SURROGATE_MODE,
+            surrogate_single=SURROGATE_MODEL_NAME,
+            surrogate_ensemble=list(SURROGATE_ENSEMBLE),
+            surrogate_ensemble_weights=SURROGATE_ENSEMBLE_WEIGHTS,
+            targets=list(TARGET_MODEL_NAMES),
+        )
+    if name == "cifar10":
+        return DatasetProfile(
+            name="cifar10",
+            rb_dataset="cifar10",
+            data_kind="cifar10",
+            image_size=CIFAR10_IMAGE_SIZE,
+            surrogate_mode=CIFAR10_SURROGATE_MODE,
+            surrogate_single=CIFAR10_SURROGATE_MODEL_NAME,
+            surrogate_ensemble=list(CIFAR10_SURROGATE_ENSEMBLE),
+            surrogate_ensemble_weights=CIFAR10_SURROGATE_ENSEMBLE_WEIGHTS,
+            targets=list(CIFAR10_TARGET_MODEL_NAMES),
+        )
+    raise ValueError(f"Unknown dataset: {name!r} (expected 'imagenet' or 'cifar10')")
